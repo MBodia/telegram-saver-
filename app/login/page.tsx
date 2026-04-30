@@ -1,4 +1,5 @@
 import TelegramLoginButton from '@/components/TelegramLoginButton'
+import DevLoginButton from '@/components/DevLoginButton'
 
 export default function LoginPage() {
   return (
@@ -15,6 +16,9 @@ export default function LoginPage() {
         <p className="text-xs text-gray-400 mt-6">
           Без паролів · Безпечно · Безкоштовно
         </p>
+        <div className="mt-8 pt-8 border-t border-gray-100">
+          <DevLoginButton />
+        </div>
       </div>
     </div>
   )
