@@ -35,7 +35,6 @@ export default function TelegramLoginButton() {
     script.setAttribute('data-telegram-login', process.env.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME!)
     script.setAttribute('data-size', 'large')
     script.setAttribute('data-onauth', 'onTelegramAuth(user)')
-    script.setAttribute('data-request-access', 'write')
     script.async = true
 
     containerRef.current.appendChild(script)
