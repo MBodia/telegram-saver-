@@ -57,9 +57,12 @@ export default async function ItemPage({
 
   if (!item) redirect('/dashboard')
 
-  const existingTags = (itemTags ?? [])
-    .map(row => (row.tags as { id: string; name: string; color: string } | null))
-    .filter(Boolean) as { id: string; name: string; color: string }[]
+  type Tag = { id: string; name: string; color: string }
+  const existingTags: Tag[] = (itemTags ?? []).flatMap(row => {
+    const tags = row.tags as Tag | Tag[] | null
+    if (!tags) return []
+    return Array.isArray(tags) ? tags : [tags]
+  })
 
   const suggestedTags: string[] =
     (item.ai_analysis as { suggested_tags?: string[] } | null)?.suggested_tags ?? []
@@ -100,10 +103,11 @@ export default async function ItemPage({
 
         {item.type === 'photo' && item.source_url && (
           <div className="mb-6">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={item.source_url}
               alt={item.title ?? 'Фото'}
-              className="rounded-xl w-full object-contain max-h-[70vh]"
+              className="rounded-xl w-full object-contain max-h-[70vh] border border-gray-100"
             />
           </div>
         )}
@@ -149,7 +153,7 @@ export default async function ItemPage({
 
         {item.forward_origin && (
           <div className="bg-white border border-gray-100 rounded-xl p-5 mb-4">
-            <p className="text-xs font-semibond text-gray-400 uppercase tracking-wide mb-2">Джерело репосту</p>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Джерело репосту</p>
             <p className="text-gray-700 text-sm">
               {(item.forward_origin as { chat_title?: string; sender_name?: string })?.chat_title ??
                (item.forward_origin as { sender_name?: string })?.sender_name ??

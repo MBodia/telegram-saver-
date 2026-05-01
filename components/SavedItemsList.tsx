@@ -12,7 +12,7 @@ type SavedItem = {
   description: string | null
   summary: string | null
   created_at: string
-  item_tags: { tags: Tag | null }[]
+  item_tags: { tags: Tag | Tag[] | null }[]
 }
 
 const TYPE_ICONS: Record<SavedItem['type'], string> = {
@@ -36,7 +36,8 @@ function formatDate(iso: string) {
 }
 
 function getItemTags(item: SavedItem): Tag[] {
-  return item.item_tags.map(it => it.tags).filter(Boolean) as Tag[]
+  return item.item_tags
+    .flatMap(it => (Array.isArray(it.tags) ? it.tags : it.tags ? [it.tags] : []))
 }
 
 export default function SavedItemsList({ items }: { items: SavedItem[] }) {
@@ -117,18 +118,25 @@ export default function SavedItemsList({ items }: { items: SavedItem[] }) {
         {/* Фільтр за тегами */}
         {allTags.length > 0 && (
           <div className="flex gap-2 flex-wrap">
-            {allTags.map(tag => (
-              <button
-                key={tag.id}
-                onClick={() => { setFilterTagId(filterTagId === tag.id ? '' : tag.id); setFilterType('') }}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-opacity ${
-                  filterTagId === tag.id ? 'opacity-100 ring-2 ring-offset-1' : 'opacity-80 hover:opacity-100'
-                }`}
-                style={{ backgroundColor: tag.color, color: '#fff', ringColor: tag.color }}
-              >
-                {tag.name}
-              </button>
-            ))}
+            {allTags.map(tag => {
+              const active = filterTagId === tag.id
+              return (
+                <button
+                  key={tag.id}
+                  onClick={() => { setFilterTagId(active ? '' : tag.id); setFilterType('') }}
+                  className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                    active ? 'shadow-md scale-105' : 'opacity-80 hover:opacity-100'
+                  }`}
+                  style={{
+                    backgroundColor: tag.color,
+                    color: '#fff',
+                    boxShadow: active ? `0 0 0 2px white, 0 0 0 4px ${tag.color}` : undefined,
+                  }}
+                >
+                  {tag.name}
+                </button>
+              )
+            })}
           </div>
         )}
       </div>
