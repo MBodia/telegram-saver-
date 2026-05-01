@@ -1,6 +1,7 @@
 import { getSession } from '@/lib/session'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
+import SavedItemsList from '@/components/SavedItemsList'
 
 export default async function DashboardPage() {
   const profileId = await getSession()
@@ -14,6 +15,12 @@ export default async function DashboardPage() {
     .single()
 
   if (!profile) redirect('/login')
+
+  const { data: items } = await supabase
+    .from('saved_items')
+    .select('id, type, title, description, summary, created_at, item_tags(tags(id, name, color))')
+    .eq('user_id', profileId)
+    .order('created_at', { ascending: false })
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -53,15 +60,7 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-100 p-8 text-center">
-          <div className="text-4xl mb-4">📬</div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-2">
-            Твої збереження з&apos;являться тут
-          </h2>
-          <p className="text-gray-500 text-sm">
-            Підключи бота і почни надсилати посилання, фото та тексти
-          </p>
-        </div>
+        <SavedItemsList items={items ?? []} />
       </main>
     </div>
   )
