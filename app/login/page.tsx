@@ -5,9 +5,22 @@ import TelegramLoginButton from '@/components/TelegramLoginButton'
 import DevLoginButton from '@/components/DevLoginButton'
 import BotCodeForm from '@/components/BotCodeForm'
 
-export default async function LoginPage() {
+const ERROR_MESSAGES: Record<string, string> = {
+  expired: 'Час авторизації вийшов. Спробуй ще раз.',
+  invalid_signature: 'Помилка підпису від Telegram. Перевір налаштування бота.',
+  db_error: 'Помилка бази даних. Спробуй ще раз.',
+}
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>
+}) {
   const session = await getSession()
   if (session) redirect('/dashboard')
+
+  const { error } = await searchParams
+  const errorMessage = error ? (ERROR_MESSAGES[error] ?? 'Помилка входу. Спробуй ще раз.') : null
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
@@ -24,6 +37,11 @@ export default async function LoginPage() {
           <p className="text-gray-500 mb-8">
             Увійди через Telegram щоб почати зберігати контент
           </p>
+          {errorMessage && (
+            <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+              {errorMessage}
+            </div>
+          )}
           <div className="flex justify-center">
             <TelegramLoginButton />
           </div>

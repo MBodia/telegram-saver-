@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin'
 import { createSession } from '@/lib/session'
+import { redirect } from 'next/navigation'
 import crypto from 'crypto'
 
 type TelegramData = {
@@ -34,26 +35,21 @@ function verifyTelegramHash(data: TelegramData): boolean {
   return hmac === hash
 }
 
-export async function POST(request: Request) {
-  const data: TelegramData = await request.json()
-
-  // Перевіряємо що дані не старіші 24 годин
+async function handleTelegramAuth(data: TelegramData): Promise<string> {
   const ageSeconds = Math.floor(Date.now() / 1000) - parseInt(data.auth_date)
   if (ageSeconds > 86400) {
     console.error('[telegram-auth] Auth data expired, age:', ageSeconds, 'seconds')
-    return Response.json({ error: 'Дані авторизації застаріли. Спробуй ще раз.' }, { status: 401 })
+    return '/login?error=expired'
   }
 
-  // Перевіряємо підпис від Telegram
   if (!verifyTelegramHash(data)) {
     console.error('[telegram-auth] Invalid signature. Bot token present:', !!process.env.TELEGRAM_BOT_TOKEN)
-    return Response.json({ error: 'Невірний підпис від Telegram. Перевір TELEGRAM_BOT_TOKEN у змінних середовища.' }, { status: 401 })
+    return '/login?error=invalid_signature'
   }
 
   const supabase = createAdminClient()
   const telegramId = parseInt(data.id)
 
-  // Шукаємо існуючого користувача
   const { data: existing } = await supabase
     .from('profiles')
     .select('id')
@@ -87,11 +83,37 @@ export async function POST(request: Request) {
 
     if (error || !created) {
       console.error('[telegram-auth] Failed to create profile:', error)
-      return Response.json({ error: 'Не вдалось створити профіль у базі даних.' }, { status: 500 })
+      return '/login?error=db_error'
     }
     profileId = created.id
   }
 
   await createSession(profileId)
-  return Response.json({ ok: true })
+  return '/dashboard'
+}
+
+// GET — redirect режим (Telegram сам перенаправляє сюди після підтвердження)
+export async function GET(request: Request) {
+  const url = new URL(request.url)
+  const params = Object.fromEntries(url.searchParams.entries())
+
+  const data = params as unknown as TelegramData
+  const destination = await handleTelegramAuth(data)
+  redirect(destination)
+}
+
+// POST — залишаємо для сумісності (бот-код та інші)
+export async function POST(request: Request) {
+  const data: TelegramData = await request.json()
+  const destination = await handleTelegramAuth(data)
+
+  if (destination === '/dashboard') {
+    return Response.json({ ok: true })
+  }
+  const errorMsg = destination.includes('expired')
+    ? 'Дані авторизації застаріли. Спробуй ще раз.'
+    : destination.includes('invalid_signature')
+      ? 'Невірний підпис від Telegram.'
+      : 'Помилка авторизації.'
+  return Response.json({ error: errorMsg }, { status: 401 })
 }
