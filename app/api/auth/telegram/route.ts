@@ -40,12 +40,14 @@ export async function POST(request: Request) {
   // Перевіряємо що дані не старіші 24 годин
   const ageSeconds = Math.floor(Date.now() / 1000) - parseInt(data.auth_date)
   if (ageSeconds > 86400) {
-    return Response.json({ error: 'Auth data expired' }, { status: 401 })
+    console.error('[telegram-auth] Auth data expired, age:', ageSeconds, 'seconds')
+    return Response.json({ error: 'Дані авторизації застаріли. Спробуй ще раз.' }, { status: 401 })
   }
 
   // Перевіряємо підпис від Telegram
   if (!verifyTelegramHash(data)) {
-    return Response.json({ error: 'Invalid signature' }, { status: 401 })
+    console.error('[telegram-auth] Invalid signature. Bot token present:', !!process.env.TELEGRAM_BOT_TOKEN)
+    return Response.json({ error: 'Невірний підпис від Telegram. Перевір TELEGRAM_BOT_TOKEN у змінних середовища.' }, { status: 401 })
   }
 
   const supabase = createAdminClient()
@@ -84,7 +86,8 @@ export async function POST(request: Request) {
       .single()
 
     if (error || !created) {
-      return Response.json({ error: 'Failed to create profile' }, { status: 500 })
+      console.error('[telegram-auth] Failed to create profile:', error)
+      return Response.json({ error: 'Не вдалось створити профіль у базі даних.' }, { status: 500 })
     }
     profileId = created.id
   }

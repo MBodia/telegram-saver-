@@ -24,7 +24,8 @@ export default function TelegramLoginButton() {
       if (res.ok) {
         router.push('/dashboard')
       } else {
-        alert('Помилка входу. Спробуй ще раз.')
+        const body = await res.json().catch(() => ({}))
+        alert(body.error ?? 'Помилка входу. Спробуй ще раз.')
       }
     }
 
