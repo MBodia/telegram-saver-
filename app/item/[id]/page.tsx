@@ -42,7 +42,7 @@ export default async function ItemPage({
   const { id } = await params
   const supabase = createAdminClient()
 
-  const [{ data: item }, { data: itemTags }] = await Promise.all([
+  const [{ data: item }, { data: itemTags }, { data: mediaFiles }] = await Promise.all([
     supabase
       .from('saved_items')
       .select('*')
@@ -53,6 +53,11 @@ export default async function ItemPage({
       .from('item_tags')
       .select('tags(id, name, color)')
       .eq('item_id', id),
+    supabase
+      .from('media_files')
+      .select('id, storage_path, mime_type, extracted_text, vision_description, order_index')
+      .eq('item_id', id)
+      .order('order_index', { ascending: true }),
   ])
 
   if (!item) redirect('/dashboard')
@@ -101,20 +106,45 @@ export default async function ItemPage({
           </a>
         )}
 
-        {item.type === 'photo' && item.source_url && (
+        {item.type === 'photo' && (
           <div className="mb-6">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={item.source_url}
-              alt={item.title ?? 'Фото'}
-              className="rounded-xl w-full object-contain max-h-[70vh] border border-gray-100"
-            />
+            {mediaFiles && mediaFiles.length > 1 ? (
+              // Альбом: сітка мініатюр
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
+                {mediaFiles.map((mf) => {
+                  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+                  const url = `${supabaseUrl}/storage/v1/object/public/media/${mf.storage_path}`
+                  return (
+                    <a key={mf.id} href={url} target="_blank" rel="noopener noreferrer">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={url}
+                        alt={mf.vision_description ?? 'Фото'}
+                        className="rounded-xl w-full object-cover border border-gray-100"
+                        style={{ aspectRatio: '1/1' }}
+                        title={mf.vision_description ?? undefined}
+                      />
+                    </a>
+                  )
+                })}
+              </div>
+            ) : (
+              // Одне фото
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={item.source_url ?? (mediaFiles?.[0]
+                  ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/media/${mediaFiles[0].storage_path}`
+                  : '')}
+                alt={item.title ?? 'Фото'}
+                className="rounded-xl w-full object-contain max-h-[70vh] border border-gray-100"
+              />
+            )}
           </div>
         )}
 
-        {item.type === 'pdf' && item.storage_path && (
+        {item.type === 'pdf' && (item.source_url || item.storage_path) && (
           <a
-            href={`${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/media/${item.storage_path}`}
+            href={item.source_url ?? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/media/${item.storage_path}`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 bg-orange-50 text-orange-600 hover:text-orange-800 text-sm px-4 py-3 rounded-xl mb-6 transition-colors"
@@ -148,6 +178,19 @@ export default async function ItemPage({
           <div className="bg-white border border-gray-100 rounded-xl p-5 mb-4">
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Повний текст</p>
             <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{item.full_text}</p>
+          </div>
+        )}
+
+        {/* OCR-тексти з альбому (кілька фото) */}
+        {mediaFiles && mediaFiles.length > 1 && mediaFiles.some(mf => mf.extracted_text) && (
+          <div className="bg-white border border-gray-100 rounded-xl p-5 mb-4">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Текст з фото</p>
+            {mediaFiles.map((mf, i) => mf.extracted_text ? (
+              <div key={mf.id} className="mb-3 last:mb-0">
+                <p className="text-xs text-gray-400 mb-1">Фото {i + 1}</p>
+                <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap">{mf.extracted_text}</p>
+              </div>
+            ) : null)}
           </div>
         )}
 

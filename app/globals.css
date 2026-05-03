@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,400;1,700&family=Syne:wght@500;600;700;800&display=swap');
 @import "tailwindcss";
 
 :root {
@@ -17,3 +18,14 @@ body {
   color: var(--foreground);
   font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
+
+.db-logout-btn {
+  font-family: 'Syne', sans-serif;
+  font-size: 12px; font-weight: 600;
+  letter-spacing: .06em;
+  color: #6E6E82;
+  background: none; border: none;
+  cursor: pointer; padding: 6px 0;
+  transition: color .2s;
+}
+.db-logout-btn:hover { color: #F0EDE4; }
