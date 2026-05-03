@@ -39,6 +39,7 @@ create table public.saved_items (
   summary text,
   ai_analysis jsonb,
   forward_origin jsonb,
+  is_favorite boolean not null default false,
   created_at timestamptz default now()
 );
 
@@ -170,5 +171,6 @@ create policy "Users can insert own media_files"
 
 create index on public.saved_items (user_id, created_at desc);
 create index on public.saved_items (user_id, type);
+create index on public.saved_items (user_id, is_favorite) where is_favorite = true;
 create index on public.tags (user_id);
 create index on public.media_files (item_id);

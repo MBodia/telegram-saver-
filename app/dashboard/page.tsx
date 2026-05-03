@@ -19,7 +19,7 @@ export default async function DashboardPage() {
 
   const { data: items } = await supabase
     .from('saved_items')
-    .select('id, type, title, description, summary, created_at, item_tags(tags(id, name, color))')
+    .select('id, type, title, description, summary, created_at, is_favorite, item_tags(tags(id, name, color))')
     .eq('user_id', profileId)
     .order('created_at', { ascending: false })
 
