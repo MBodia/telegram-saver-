@@ -1,7 +1,7 @@
 # Telegram Saver — Стан проекту
 
 > Документ описує що вже побудовано, як це працює і куди рухаємось далі.
-> Оновлено: 2026-05-04
+> Оновлено: 2026-05-06
 
 ---
 
@@ -13,8 +13,8 @@
 
 | Сервіс | Технологія | Хостинг | Репозиторій |
 |--------|-----------|---------|-------------|
-| Веб-сайт `telegram-saver.vercel.app` | Next.js 14 | Vercel | окремий проект |
-| Telegram-бот `@AI_hol228MBot` | Node.js + grammY | Railway | **цей репозиторій** |
+| Веб-сайт `telegram-saver.vercel.app` | Next.js 16 | Vercel | `telegram-saver` |
+| Telegram-бот `@AI_hol228MBot` | Node.js + grammY | Railway | `telegram-saver-bot` |
 
 Обидва сервіси працюють зі **спільною базою Supabase** — читають і пишуть в одні й ті самі таблиці.
 
@@ -25,31 +25,27 @@
 ```
 Desktop/
 └── projects/
-    └── telegram-saver-bot/
-        │
-        ├── src/
-        │   ├── index.ts        — точка входу, запуск Long Polling
-        │   ├── bot.ts          — ініціалізація Bot, підключення модулів
-        │   ├── commands.ts     — /start, /help, /list
-        │   ├── auth.ts         — /login (код для входу на сайт)
-        │   ├── handlers.ts     — вся логіка обробки повідомлень
-        │   ├── claude.ts       — всі виклики Claude API
-        │   └── supabase.ts     — клієнт Supabase + TypeScript типи
-        │
-        ├── doc/
-        │   ├── bot-plan.md
-        │   ├── Telegram_Saver_Spec_v2.md
-        │   └── PROJECT_STATUS.bot.md  ← цей файл
-        │
-        ├── .env.example
-        ├── railway.toml
-        ├── package.json
-        └── tsconfig.json
+    ├── telegram-saver/          ← Next.js фронтенд (Vercel)
+    │   ├── app/
+    │   ├── components/
+    │   ├── lib/
+    │   ├── scripts/
+    │   └── docs/
+    │
+    └── telegram-saver-bot/      ← Telegram бот (Railway)
+        └── src/
+            ├── index.ts
+            ├── bot.ts
+            ├── commands.ts
+            ├── auth.ts
+            ├── handlers.ts
+            ├── claude.ts
+            └── supabase.ts
 ```
 
 ---
 
-## Як працює Telegram-бот
+## Як працює система
 
 ```
 Користувач у Telegram
@@ -59,46 +55,23 @@ Desktop/
 ┌──────────────────────┐
 │    Telegram API      │  Long Polling
 └──────────┬───────────┘
-           │
            ▼
-┌──────────────────────────────────────────────┐
-│                  bot.ts                       │
-│   registerCommands()                          │
-│   registerAuthCommands()                      │
-│   registerHandlers()                          │
-└──────────┬───────────────────────────────────┘
+       handlers.ts
            │
-           ├── Команди (/start /help /list /login)
-           │
-           └── handlers.ts
-                        │
-                        ├── Голосове повідомлення (voice)
-                        │       ├── download .ogg з Telegram API
-                        │       ├── OpenAI Whisper → транскрипція (uk)
-                        │       ├── Claude → резюме
-                        │       └── upload → Supabase Storage → saved_items
-                        │
-                        ├── Аудіофайл (audio, mp3/m4a)
-                        │       ├── download з Telegram API
-                        │       ├── OpenAI Whisper → транскрипція (uk)
-                        │       ├── Claude → резюме
-                        │       └── upload → Supabase Storage → saved_items
-                        │
-                        ├── Forward (переслане)
-                        │       └── analyzeText() → summary + теги
-                        │
-                        ├── Фото (одиночне або альбом)
-                        │       ├── download → Supabase Storage
-                        │       └── analyzeImage() → OCR + опис
-                        │
-                        ├── Документ
-                        │       ├── PDF → pdf-parse → summarizePdf()
-                        │       └── Зображення-файл → analyzeImage()
-                        │
-                        └── Текст / URL
-                                ├── t.me/channel/123 → embed парсинг
-                                ├── youtube.com → YouTube Data API
-                                └── інші сайти → Readability
+           ├── Голосове/Аудіо → Whisper → Claude → saved_items + embedding
+           ├── Фото/Альбом    → Storage → Claude Vision → saved_items + embedding
+           ├── PDF            → pdf-parse → Claude → saved_items + embedding
+           ├── Forward        → Claude → saved_items + embedding
+           ├── Посилання      → fetchPageData → Claude → saved_items + embedding
+           └── Текст          → Claude → saved_items + embedding
+
+Користувач у браузері
+        │
+        ▼
+    dashboard (Next.js)
+        │
+        ├── Звичайний пошук → client-side includes()
+        └── AI пошук → /api/search → OpenAI embedding → pgvector → результати
 ```
 
 ---
@@ -112,7 +85,7 @@ Desktop/
 - [x] TypeScript, компіляція через tsc
 
 ### Команди бота
-- [x] `/start` — реєстрація профілю, кнопка на сайт
+- [x] `/start` — реєстрація профілю, аватар → Supabase Storage, кнопка на сайт
 - [x] `/help` — список можливостей
 - [x] `/list` — останні 5 збережень з типами і датами
 - [x] `/login` — одноразовий 6-значний код для входу на сайт
@@ -136,12 +109,22 @@ Desktop/
 - [x] **YouTube лінк у тексті Telegram поста** — авто-визначення + аналіз відео
 - [x] **Fallback** — якщо сторінка недоступна, Claude аналізує за URL
 
-### Аудіо (додано 2026-05-04)
+### Аудіо
 - [x] Голосові повідомлення (.ogg) — без конвертації, Whisper підтримує напряму
 - [x] Аудіофайли (.mp3, .m4a) — авто-визначення mime-типу
 - [x] Мова транскрипції: `uk` (українська)
 - [x] Fallback: якщо Whisper не спрацював — зберігає без транскрипта
 - [x] Оригінальний файл зберігається у `audio/` в Supabase Storage
+
+### Семантичний пошук (додано 2026-05-05)
+- [x] pgvector extension в Supabase
+- [x] Колонка `embedding vector(1536)` в `saved_items`
+- [x] Функція `search_items()` — cosine similarity через ivfflat індекс
+- [x] Бот генерує embedding для **кожного нового збереження** (всі 8 типів)
+- [x] Backfill-скрипт для існуючих збережень (`scripts/backfill-embeddings.ts`)
+- [x] API route `POST /api/search` — OpenAI `text-embedding-3-small`
+- [x] UI toggle "ТЕКСТ / AI" в дашборді
+- [x] AI-пошук: кнопка "ЗНАЙТИ", бейдж схожості (87%), стан завантаження
 
 ### Якість AI-аналізу
 - [x] Summary з конкретними фактами (без абстракцій)
@@ -155,6 +138,7 @@ Desktop/
 
 - [x] Авторизація через Telegram + /login код
 - [x] Dashboard: список збережень з фільтрами (тип, теги, дата, пошук, обране)
+- [x] AI-пошук з бейджем схожості
 - [x] Сторінка елемента: тип-специфічне відображення
   - Фото: одиночне або сітка альбому
   - PDF: кнопка "Відкрити PDF"
@@ -163,6 +147,7 @@ Desktop/
 - [x] Теги: додавання, кольори, AI-пропозиції
 - [x] Обране (is_favorite)
 - [x] Видалення окремих елементів або масово
+- [x] Аватар користувача з Telegram (зберігається в Supabase Storage — не протухає)
 
 ---
 
@@ -176,7 +161,7 @@ Desktop/
 | `SUPABASE_URL` | URL проекту Supabase |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service Role ключ |
 | `ANTHROPIC_API_KEY` | Claude API (Haiku) |
-| `OPENAI_API_KEY` | OpenAI Whisper API |
+| `OPENAI_API_KEY` | OpenAI Whisper + Embeddings |
 | `YOUTUBE_API_KEY` | YouTube Data API v3 (опційно) |
 | `SITE_URL` | URL сайту для кнопки /start |
 
@@ -187,6 +172,7 @@ Desktop/
 | `NEXT_PUBLIC_SUPABASE_URL` | URL Supabase |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Anon ключ |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service Role ключ |
+| `OPENAI_API_KEY` | OpenAI Embeddings для /api/search |
 
 ---
 
@@ -202,7 +188,9 @@ Desktop/
 
 ---
 
-## База даних — таблиця `saved_items`
+## База даних
+
+### Таблиця `saved_items`
 
 | Поле | Тип | Що зберігається |
 |------|-----|-----------------|
@@ -216,13 +204,17 @@ Desktop/
 | `full_text` | text | Текст статті / транскрипція аудіо |
 | `summary` | text | AI-резюме 2-3 речення |
 | `ai_analysis` | jsonb | `{topic, suggested_tags}` |
+| `embedding` | vector(1536) | OpenAI embedding для семантичного пошуку |
 | `created_at` | timestamp | Дата збереження |
 
-> ⚠️ **Потрібна міграція БД** (якщо ще не виконана):
-> ```sql
-> ALTER TYPE public.item_type ADD VALUE IF NOT EXISTS 'voice';
-> ALTER TYPE public.item_type ADD VALUE IF NOT EXISTS 'audio';
-> ```
+### SQL-міграції (вже виконані)
+```sql
+ALTER TYPE public.item_type ADD VALUE IF NOT EXISTS 'voice';
+ALTER TYPE public.item_type ADD VALUE IF NOT EXISTS 'audio';
+CREATE EXTENSION IF NOT EXISTS vector;
+ALTER TABLE saved_items ADD COLUMN embedding vector(1536);
+CREATE INDEX ON saved_items USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+```
 
 ---
 
@@ -234,22 +226,23 @@ Desktop/
 | Supabase | $0 (free tier) |
 | Railway (бот) | ~$5/міс |
 | Claude API (Haiku) | ~$1–3/міс |
-| OpenAI Whisper | ~$0.60/міс (100 голосових × 1 хв) |
-| YouTube Data API | $0 (10k запитів/день) |
+| OpenAI Whisper | ~$0.60/міс |
+| OpenAI Embeddings | ~$0.01/міс (мізер) |
+| YouTube Data API | $0 |
 | **Разом** | **~$7–9/міс** |
 
 ---
 
-## Що залишилось / Roadmap
+## Що залишилось
 
 ### Технічний борг
-- [ ] Міграція БД: додати `voice` і `audio` до enum `item_type`
 - [ ] Оновити Node.js 18 → 20 в Railway
 - [ ] Telegram пости з відео — наразі тільки текст і фото
 
 ### Потенційні покращення
-- [ ] Команда `/search <запит>` — пошук прямо в боті
+- [ ] Команда `/search <запит>` — AI-пошук прямо в боті
 - [ ] Кешування однакових URL (не витрачати API двічі)
 - [ ] Telegram приватні канали (MTProto / UserBot)
 - [ ] Відео-повідомлення (video_note, video)
-- [ ] Пошук на сайті по транскрипції аудіо
+- [ ] Пагінація на дашборді (зараз вантажяться всі елементи)
+- [ ] Автооновлення аватара при кожному `/start` (вже є) + кнопка "Оновити фото" в профілі
