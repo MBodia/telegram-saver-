@@ -7,7 +7,7 @@ type Tag = { id: string; name: string; color: string }
 
 type SavedItem = {
   id: string
-  type: 'link' | 'photo' | 'pdf' | 'text' | 'forward'
+  type: 'link' | 'photo' | 'pdf' | 'text' | 'forward' | 'voice' | 'audio'
   title: string | null
   description: string | null
   summary: string | null
@@ -26,6 +26,8 @@ const TYPE_ICONS: Record<SavedItem['type'], string> = {
   pdf: '📄',
   text: '📝',
   forward: '↪️',
+  voice: '🎙️',
+  audio: '🎵',
 }
 
 const TYPE_LABELS: Record<SavedItem['type'], string> = {
@@ -34,6 +36,8 @@ const TYPE_LABELS: Record<SavedItem['type'], string> = {
   pdf: 'PDF',
   text: 'Текст',
   forward: 'Репост',
+  voice: 'Голос',
+  audio: 'Аудіо',
 }
 
 function formatDate(iso: string) {
@@ -45,9 +49,14 @@ function getItemTags(item: SavedItem): Tag[] {
     .flatMap(it => (Array.isArray(it.tags) ? it.tags : it.tags ? [it.tags] : []))
 }
 
-export default function SavedItemsList({ items }: { items: SavedItem[] }) {
+type AiResult = { id: string; title: string | null; summary: string | null; similarity: number }
+
+export default function SavedItemsList({ items, userId }: { items: SavedItem[]; userId: string }) {
   const [localItems, setLocalItems] = useState(items)
   const [search, setSearch] = useState('')
+  const [searchMode, setSearchMode] = useState<'text' | 'ai'>('text')
+  const [aiResults, setAiResults] = useState<AiResult[] | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
   const [filterType, setFilterType] = useState<SavedItem['type'] | ''>('')
   const [filterTagId, setFilterTagId] = useState('')
   const [filterFavorites, setFilterFavorites] = useState(false)
@@ -63,7 +72,17 @@ export default function SavedItemsList({ items }: { items: SavedItem[] }) {
     ).values()
   )
 
-  const filtered = localItems.filter(item => {
+  const aiResultIds = aiResults ? new Set(aiResults.map(r => r.id)) : null
+  const similarityMap = aiResults
+    ? Object.fromEntries(aiResults.map(r => [r.id, r.similarity]))
+    : {}
+
+  const baseItems = searchMode === 'ai' && aiResults !== null
+    ? localItems.filter(item => aiResultIds!.has(item.id))
+        .sort((a, b) => (similarityMap[b.id] ?? 0) - (similarityMap[a.id] ?? 0))
+    : localItems
+
+  const filtered = baseItems.filter(item => {
     if (filterFavorites && !item.is_favorite) return false
     if (filterType && item.type !== filterType) return false
     if (filterTagId && !getItemTags(item).some(t => t.id === filterTagId)) return false
@@ -80,7 +99,7 @@ export default function SavedItemsList({ items }: { items: SavedItem[] }) {
         if (itemDate < monthAgo) return false
       }
     }
-    if (search) {
+    if (searchMode === 'text' && search) {
       const q = search.toLowerCase()
       const inTitle = item.title?.toLowerCase().includes(q) ?? false
       const inSummary = item.summary?.toLowerCase().includes(q) ?? false
@@ -90,6 +109,25 @@ export default function SavedItemsList({ items }: { items: SavedItem[] }) {
     }
     return true
   })
+
+  async function runAiSearch() {
+    if (!search.trim()) return
+    setAiLoading(true)
+    setAiResults(null)
+    try {
+      const res = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: search, userId }),
+      })
+      const data = await res.json()
+      setAiResults(Array.isArray(data) ? data : [])
+    } catch {
+      setAiResults([])
+    } finally {
+      setAiLoading(false)
+    }
+  }
 
   function toggleSelect(id: string) {
     setSelected(prev => {
@@ -156,7 +194,7 @@ export default function SavedItemsList({ items }: { items: SavedItem[] }) {
     )
   }
 
-  const isFiltered = !!(filterType || filterTagId || filterFavorites || filterDate || search)
+  const isFiltered = !!(filterType || filterTagId || filterFavorites || filterDate || (searchMode === 'text' && search) || (searchMode === 'ai' && aiResults !== null))
 
   return (
     <>
@@ -390,12 +428,67 @@ export default function SavedItemsList({ items }: { items: SavedItem[] }) {
           <span className="sl-search-icon">⌕</span>
           <input
             type="text"
-            placeholder="Пошук..."
+            placeholder={searchMode === 'ai' ? 'Опиши що шукаєш...' : 'Пошук...'}
             value={search}
-            onChange={e => setSearch(e.target.value)}
+            onChange={e => {
+              setSearch(e.target.value)
+              if (searchMode === 'text') setAiResults(null)
+            }}
+            onKeyDown={e => { if (e.key === 'Enter' && searchMode === 'ai') runAiSearch() }}
             className="sl-search"
           />
         </div>
+
+        {/* Mode toggle */}
+        <div style={{ display: 'flex', borderRadius: 10, overflow: 'hidden', border: '1px solid #1F1F28', flexShrink: 0 }}>
+          <button
+            onClick={() => { setSearchMode('text'); setAiResults(null) }}
+            style={{
+              padding: '0 14px', height: '100%',
+              fontFamily: "'Syne', sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: '.04em',
+              cursor: 'pointer', border: 'none',
+              background: searchMode === 'text' ? '#F0EDE4' : 'transparent',
+              color: searchMode === 'text' ? '#09090C' : '#6E6E82',
+              transition: 'background .15s, color .15s',
+            }}
+          >
+            ТЕКСТ
+          </button>
+          <button
+            onClick={() => { setSearchMode('ai'); setAiResults(null) }}
+            style={{
+              padding: '0 14px', height: '100%',
+              fontFamily: "'Syne', sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: '.04em',
+              cursor: 'pointer', border: 'none', borderLeft: '1px solid #1F1F28',
+              background: searchMode === 'ai' ? 'rgba(232,160,32,0.15)' : 'transparent',
+              color: searchMode === 'ai' ? '#E8A020' : '#6E6E82',
+              transition: 'background .15s, color .15s',
+            }}
+          >
+            AI
+          </button>
+        </div>
+
+        {/* AI search button */}
+        {searchMode === 'ai' && (
+          <button
+            onClick={runAiSearch}
+            disabled={aiLoading || !search.trim()}
+            style={{
+              padding: '0 18px', borderRadius: 10, flexShrink: 0,
+              fontFamily: "'Syne', sans-serif", fontSize: 12, fontWeight: 700, letterSpacing: '.05em',
+              cursor: aiLoading || !search.trim() ? 'not-allowed' : 'pointer',
+              border: 'none',
+              background: aiLoading || !search.trim() ? '#1F1F28' : '#E8A020',
+              color: aiLoading || !search.trim() ? '#4A4A5A' : '#09090C',
+              transition: 'background .15s, color .15s',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {aiLoading ? '...' : 'ЗНАЙТИ'}
+          </button>
+        )}
+
         <button
           onClick={() => { setSelectMode(v => !v); setSelected(new Set()) }}
           className={`sl-sel-btn ${selectMode ? 'sl-sel-btn-on' : 'sl-sel-btn-off'}`}
@@ -489,7 +582,17 @@ export default function SavedItemsList({ items }: { items: SavedItem[] }) {
       </div>
 
       {/* ── List ── */}
-      {filtered.length === 0 ? (
+      {searchMode === 'ai' && aiLoading ? (
+        <div style={{ background: '#111116', border: '1px solid #1F1F28', borderRadius: 16, padding: 40, textAlign: 'center' }}>
+          <div style={{ fontSize: 32, marginBottom: 14 }}>🔎</div>
+          <p style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 15, color: '#F0EDE4', margin: '0 0 8px' }}>
+            Шукаємо за змістом...
+          </p>
+          <p style={{ fontFamily: "'Syne', sans-serif", fontSize: 13, color: '#6E6E82', margin: 0 }}>
+            AI аналізує твої збереження
+          </p>
+        </div>
+      ) : filtered.length === 0 ? (
         <div style={{
           background: '#111116',
           border: '1px solid #1F1F28',
@@ -502,7 +605,7 @@ export default function SavedItemsList({ items }: { items: SavedItem[] }) {
             Нічого не знайдено
           </p>
           <p style={{ fontFamily: "'Syne', sans-serif", fontSize: 13, color: '#6E6E82', margin: 0, lineHeight: 1.6 }}>
-            Спробуй змінити фільтри або пошуковий запит
+            {searchMode === 'ai' ? 'Спробуй інші слова або описовий запит' : 'Спробуй змінити фільтри або пошуковий запит'}
           </p>
         </div>
       ) : (
@@ -511,6 +614,8 @@ export default function SavedItemsList({ items }: { items: SavedItem[] }) {
             const tags = getItemTags(item)
             const isSelected = selected.has(item.id)
             const displayText = item.summary ?? item.description
+
+            const similarity = searchMode === 'ai' ? similarityMap[item.id] : undefined
 
             const cardInner = (
               <>
@@ -557,6 +662,17 @@ export default function SavedItemsList({ items }: { items: SavedItem[] }) {
 
                   {/* Meta: date + actions */}
                   <div className="sl-meta" onClick={e => e.preventDefault()}>
+                    {similarity !== undefined && (
+                      <span style={{
+                        fontFamily: "'Syne', sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: '.04em',
+                        padding: '2px 8px', borderRadius: 6,
+                        background: 'rgba(232,160,32,0.12)', color: '#E8A020',
+                        border: '1px solid rgba(232,160,32,0.25)',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {Math.round(similarity * 100)}%
+                      </span>
+                    )}
                     <span className="sl-date">{formatDate(item.created_at)}</span>
                     {!selectMode && (
                       <div className="sl-actions">

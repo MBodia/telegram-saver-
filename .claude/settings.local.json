@@ -21,7 +21,21 @@
       "PowerShell(ls \"C:\\\\Users\\\\bodia\\\\Desktop\\\\projects\\\\telegram-saver\" | Where-Object {$_.PSIsContainer} | Select-Object Name)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\bodia\\\\Desktop\\\\projects\\\\telegram-saver\" -Include \"*.tsx\", \"*.ts\" -Recurse -Exclude node_modules)",
       "PowerShell(taskkill *)",
-      "Bash(Get-ChildItem *)"
+      "Bash(Get-ChildItem *)",
+      "PowerShell(Get-Process *)",
+      "Bash(cmd /c \"rmdir /s /q C:\\\\Users\\\\bodia\\\\Desktop\\\\projects\\\\telegram-saver-bot\")",
+      "PowerShell(Rename-Item *)",
+      "Bash(Select-Object FullName)",
+      "Bash(Sort-Object FullName)",
+      "Bash(Select-Object Name, FullName)",
+      "Bash(git diff *)",
+      "Bash(git rm *)",
+      "Bash(xargs grep -l \"saved_items\\\\|insert\\\\|saveItem\")",
+      "Bash(grep *)",
+      "Bash(New-Item -ItemType Directory -Path \"C:\\\\Users\\\\bodia\\\\Desktop\\\\projects\\\\telegram-saver\\\\scripts\" -Force)",
+      "Bash(Out-Null)",
+      "Bash(npx ts-node *)",
+      "Bash(npx --prefix /c/Users/bodia/Desktop/projects/telegram-saver-bot tsc --noEmit --project /c/Users/bodia/Desktop/projects/telegram-saver-bot/tsconfig.json)"
     ]
   }
 }

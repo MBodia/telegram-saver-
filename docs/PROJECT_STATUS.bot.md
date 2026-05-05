@@ -1,7 +1,7 @@
 # Telegram Saver — Стан проекту
 
 > Документ описує що вже побудовано, як це працює і куди рухаємось далі.
-> Оновлено: 2026-05-03
+> Оновлено: 2026-05-04
 
 ---
 
@@ -24,34 +24,27 @@
 
 ```
 Desktop/
-└── projects/                               ← папка всіх проектів
-    └── telegram-saver-bot/                 ← цей репозиторій
+└── projects/
+    └── telegram-saver-bot/
         │
-        ├── src/                            ← весь вихідний код (TypeScript)
-        │   ├── index.ts                    — точка входу, запуск Long Polling
-        │   ├── bot.ts                      — ініціалізація Bot, підключення модулів
-        │   ├── commands.ts                 — команди /start, /help, /list
-        │   ├── auth.ts                     — команда /login (код для входу на сайт)
-        │   ├── handlers.ts                 — вся логіка обробки повідомлень
-        │   │                                 fetchPageData, fetchTelegramPostData,
-        │   │                                 fetchYouTubeData, tgParseText
-        │   ├── claude.ts                   — всі виклики Claude API
-        │   │                                 analyzeLinkContent, analyzeText,
-        │   │                                 analyzeImage, summarizePdf
-        │   └── supabase.ts                 — клієнт Supabase + TypeScript типи
+        ├── src/
+        │   ├── index.ts        — точка входу, запуск Long Polling
+        │   ├── bot.ts          — ініціалізація Bot, підключення модулів
+        │   ├── commands.ts     — /start, /help, /list
+        │   ├── auth.ts         — /login (код для входу на сайт)
+        │   ├── handlers.ts     — вся логіка обробки повідомлень
+        │   ├── claude.ts       — всі виклики Claude API
+        │   └── supabase.ts     — клієнт Supabase + TypeScript типи
         │
-        ├── doc/                            ← документація проекту
-        │   ├── bot-plan.md                 — початковий план (Етап 3)
-        │   ├── Telegram_Saver_Spec_v2.md   — повна специфікація проекту
-        │   └── PROJECT_STATUS.md           — цей файл
+        ├── doc/
+        │   ├── bot-plan.md
+        │   ├── Telegram_Saver_Spec_v2.md
+        │   └── PROJECT_STATUS.bot.md  ← цей файл
         │
-        ├── dist/                           — скомпільований JS (генерується tsc, не в git)
-        ├── node_modules/                   — залежності npm (не в git)
-        ├── .env.example                    — приклад змінних середовища
-        ├── .gitignore
-        ├── railway.toml                    — конфіг деплою на Railway
-        ├── package.json                    — залежності та скрипти (build, start)
-        └── tsconfig.json                   — конфіг TypeScript компілятора
+        ├── .env.example
+        ├── railway.toml
+        ├── package.json
+        └── tsconfig.json
 ```
 
 ---
@@ -64,7 +57,7 @@ Desktop/
         │  надсилає повідомлення
         ▼
 ┌──────────────────────┐
-│    Telegram API      │  Long Polling — бот постійно "слухає" нові повідомлення
+│    Telegram API      │  Long Polling
 └──────────┬───────────┘
            │
            ▼
@@ -76,96 +69,128 @@ Desktop/
 └──────────┬───────────────────────────────────┘
            │
            ├── Команди (/start /help /list /login)
-           │        └── commands.ts / auth.ts → Supabase → відповідь
            │
-           └── Будь-яке інше повідомлення → handlers.ts
+           └── handlers.ts
                         │
-                        ├── Forward (переслане з каналу)
-                        │       └── analyzeText() → summary + теги → Supabase
+                        ├── Голосове повідомлення (voice)
+                        │       ├── download .ogg з Telegram API
+                        │       ├── OpenAI Whisper → транскрипція (uk)
+                        │       ├── Claude → резюме
+                        │       └── upload → Supabase Storage → saved_items
                         │
-                        ├── Фото
+                        ├── Аудіофайл (audio, mp3/m4a)
                         │       ├── download з Telegram API
-                        │       ├── upload → Supabase Storage
-                        │       └── analyzeImage() → OCR + опис → Supabase
+                        │       ├── OpenAI Whisper → транскрипція (uk)
+                        │       ├── Claude → резюме
+                        │       └── upload → Supabase Storage → saved_items
+                        │
+                        ├── Forward (переслане)
+                        │       └── analyzeText() → summary + теги
+                        │
+                        ├── Фото (одиночне або альбом)
+                        │       ├── download → Supabase Storage
+                        │       └── analyzeImage() → OCR + опис
                         │
                         ├── Документ
-                        │       ├── PDF → pdf-parse → summarizePdf() → Supabase
-                        │       └── Зображення-файл → analyzeImage() → Supabase
+                        │       ├── PDF → pdf-parse → summarizePdf()
+                        │       └── Зображення-файл → analyzeImage()
                         │
-                        └── Текст
-                                │
-                                ├── Містить URL? ─── YES ──→ fetchPageData(url)
-                                │                               │
-                                │                               ├── t.me/channel/123
-                                │                               │     └── embed парсинг (regex)
-                                │                               │         + витяг фото з поста
-                                │                               │         + YouTube API якщо є yt-лінк
-                                │                               │
-                                │                               ├── youtube.com / youtu.be
-                                │                               │     └── YouTube Data API v3
-                                │                               │
-                                │                               └── Будь-який інший сайт
-                                │                                     └── fetch + Readability
-                                │
-                                │                    + є фото? → analyzeImage()
-                                │                    └── analyzeLinkContent() → summary + теги
-                                │
-                                └── Немає URL ──→ analyzeText() → summary + теги
-                                                        │
-                                                        └── Supabase → saved_items
+                        └── Текст / URL
+                                ├── t.me/channel/123 → embed парсинг
+                                ├── youtube.com → YouTube Data API
+                                └── інші сайти → Readability
 ```
 
 ---
 
-## Що вже побудовано
+## Що реалізовано — повний список
 
 ### Інфраструктура
 - [x] Бот запущений 24/7 на Railway
 - [x] Long Polling — стабільна робота без webhook
 - [x] Спільна база Supabase з веб-сайтом
-- [x] Захист від подвійного запуску (один інстанс)
+- [x] TypeScript, компіляція через tsc
 
 ### Команди бота
-- [x] `/start` — реєстрація профілю в базі, кнопка-посилання на сайт
-- [x] `/help` — список всіх можливостей
+- [x] `/start` — реєстрація профілю, кнопка на сайт
+- [x] `/help` — список можливостей
 - [x] `/list` — останні 5 збережень з типами і датами
 - [x] `/login` — одноразовий 6-значний код для входу на сайт
 
 ### Типи контенту
-- [x] **Текст** → Claude аналізує тему, ключову думку, пропонує теги
-- [x] **Посилання** → парсинг сторінки + AI-резюме + теги
-- [x] **Фото** → upload в Supabase Storage + Claude Vision (OCR + опис)
-- [x] **PDF** → витяг тексту через pdf-parse + резюме
-- [x] **Forward** → зберігає текст + аналіз + назву джерела
+
+| Тип | Іконка | Що робить бот |
+|-----|--------|---------------|
+| `text` | 📝 | Claude: тема + ключова думка + теги |
+| `link` | 🔗 | Парсинг сторінки + AI-резюме + теги |
+| `photo` | 🖼️ | Supabase Storage + Claude Vision: OCR + опис |
+| `pdf` | 📄 | pdf-parse + Claude: резюме документа |
+| `forward` | ↩️ | Текст + аналіз + назва джерела |
+| `voice` | 🎙️ | Whisper транскрипція + Claude резюме + Storage |
+| `audio` | 🎵 | Whisper транскрипція + Claude резюме + Storage |
 
 ### Спеціальна обробка посилань
-- [x] **YouTube** — YouTube Data API v3: назва відео, опис, теги автора
-- [x] **Telegram пост** (`t.me/channel/id`) — regex-парсинг тексту через embed
-- [x] **Telegram пост з фото** — витяг URL зображення + Claude Vision
-- [x] **YouTube лінк у тексті Telegram поста** — автовизначення та аналіз відео
+- [x] **YouTube** — YouTube Data API v3: назва, опис, теги
+- [x] **Telegram пост** (`t.me/channel/id`) — regex-парсинг через embed
+- [x] **Telegram пост з фото** — витяг URL зображення + Vision
+- [x] **YouTube лінк у тексті Telegram поста** — авто-визначення + аналіз відео
 - [x] **Fallback** — якщо сторінка недоступна, Claude аналізує за URL
 
+### Аудіо (додано 2026-05-04)
+- [x] Голосові повідомлення (.ogg) — без конвертації, Whisper підтримує напряму
+- [x] Аудіофайли (.mp3, .m4a) — авто-визначення mime-типу
+- [x] Мова транскрипції: `uk` (українська)
+- [x] Fallback: якщо Whisper не спрацював — зберігає без транскрипта
+- [x] Оригінальний файл зберігається у `audio/` в Supabase Storage
+
 ### Якість AI-аналізу
-- [x] Summary з конкретними фактами (імена, події — без абстракцій)
+- [x] Summary з конкретними фактами (без абстракцій)
 - [x] Розпізнавання відомих осіб на фото
 - [x] Визначення типу зображення (прев'ю YouTube / скріншот / фото / мем)
+- [x] Prompt caching через `cache_control: ephemeral`
 
 ---
 
-## Змінні середовища (Railway → Variables)
+## Веб-сайт (telegram-saver) — що реалізовано
+
+- [x] Авторизація через Telegram + /login код
+- [x] Dashboard: список збережень з фільтрами (тип, теги, дата, пошук, обране)
+- [x] Сторінка елемента: тип-специфічне відображення
+  - Фото: одиночне або сітка альбому
+  - PDF: кнопка "Відкрити PDF"
+  - Голос/Аудіо: `<audio>` плеєр + блок "Транскрипція"
+  - Текст/Посилання: summary + full_text
+- [x] Теги: додавання, кольори, AI-пропозиції
+- [x] Обране (is_favorite)
+- [x] Видалення окремих елементів або масово
+
+---
+
+## Змінні середовища
+
+### Bot (Railway → Variables)
 
 | Змінна | Призначення |
 |--------|-------------|
 | `TELEGRAM_BOT_TOKEN` | Токен бота від @BotFather |
 | `SUPABASE_URL` | URL проекту Supabase |
-| `SUPABASE_SERVICE_ROLE_KEY` | Service Role ключ Supabase |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service Role ключ |
 | `ANTHROPIC_API_KEY` | Claude API (Haiku) |
-| `YOUTUBE_API_KEY` | YouTube Data API v3 (Google Cloud Console) |
-| `SITE_URL` | URL сайту для кнопки у відповіді /start |
+| `OPENAI_API_KEY` | OpenAI Whisper API |
+| `YOUTUBE_API_KEY` | YouTube Data API v3 (опційно) |
+| `SITE_URL` | URL сайту для кнопки /start |
+
+### Frontend (Vercel → Environment Variables)
+
+| Змінна | Призначення |
+|--------|-------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | URL Supabase |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Anon ключ |
+| `SUPABASE_SERVICE_ROLE_KEY` | Service Role ключ |
 
 ---
 
-## Claude API — моделі та використання
+## Claude API — моделі та функції
 
 | Функція | Модель | Max tokens |
 |---------|--------|------------|
@@ -173,9 +198,7 @@ Desktop/
 | Аналіз тексту | `claude-haiku-4-5-20251001` | 512 |
 | Аналіз зображення | `claude-haiku-4-5-20251001` | 1024 |
 | Резюме PDF | `claude-haiku-4-5-20251001` | 512 |
-
-Haiku — найдешевша модель Claude, повністю достатня для задач бота.
-Prompt caching увімкнено через `cache_control: ephemeral` на system prompt.
+| Резюме транскрипції | `claude-haiku-4-5-20251001` | 512 |
 
 ---
 
@@ -185,33 +208,21 @@ Prompt caching увімкнено через `cache_control: ephemeral` на sys
 |------|-----|-----------------|
 | `id` | uuid | унікальний ідентифікатор |
 | `user_id` | uuid | FK → profiles |
-| `type` | enum | `link` / `pdf` / `photo` / `text` / `forward` |
-| `source_url` | text | URL посилання або `t.me/...` |
-| `title` | text | Назва сторінки / відео / канал |
-| `description` | text | Коментар користувача (якщо є) |
-| `full_text` | text | Повний текст статті або поста |
+| `type` | enum | `link` / `pdf` / `photo` / `text` / `forward` / `voice` / `audio` |
+| `source_url` | text | URL посилання |
+| `storage_path` | text | шлях у Supabase Storage |
+| `title` | text | Назва / перші слова резюме |
+| `description` | text | Коментар користувача |
+| `full_text` | text | Текст статті / транскрипція аудіо |
 | `summary` | text | AI-резюме 2-3 речення |
-| `ai_analysis` | jsonb | `{topic, suggested_tags}` або `{key_idea, suggested_tags}` |
+| `ai_analysis` | jsonb | `{topic, suggested_tags}` |
 | `created_at` | timestamp | Дата збереження |
 
----
-
-## Куди рухаємось далі
-
-### Залишилось з MVP (Spec v2, Етап 7):
-- [ ] Пошук на сайті по `title`, `summary`, `full_text`
-- [ ] Фільтри за типом контенту і датою
-- [ ] Альбоми фото (кілька фото в одному пості) → таблиця `media_files`
-- [ ] End-to-end тестування всіх сценаріїв
-
-### Технічний борг:
-- [ ] Оновити Node.js 18 → 20 в Railway (є попередження від supabase-js)
-- [ ] Telegram пости з відео — наразі аналізується тільки текст і фото
-
-### Потенційні покращення бота:
-- [ ] Команда `/search <запит>` — пошук прямо в боті без сайту
-- [ ] Кешування аналізу однакових URL (не витрачати API двічі)
-- [ ] Telegram приватні канали (потребує MTProto або UserBot)
+> ⚠️ **Потрібна міграція БД** (якщо ще не виконана):
+> ```sql
+> ALTER TYPE public.item_type ADD VALUE IF NOT EXISTS 'voice';
+> ALTER TYPE public.item_type ADD VALUE IF NOT EXISTS 'audio';
+> ```
 
 ---
 
@@ -223,5 +234,22 @@ Prompt caching увімкнено через `cache_control: ephemeral` на sys
 | Supabase | $0 (free tier) |
 | Railway (бот) | ~$5/міс |
 | Claude API (Haiku) | ~$1–3/міс |
-| YouTube Data API | $0 (10k запитів/день безкоштовно) |
-| **Разом** | **~$6–8/міс** |
+| OpenAI Whisper | ~$0.60/міс (100 голосових × 1 хв) |
+| YouTube Data API | $0 (10k запитів/день) |
+| **Разом** | **~$7–9/міс** |
+
+---
+
+## Що залишилось / Roadmap
+
+### Технічний борг
+- [ ] Міграція БД: додати `voice` і `audio` до enum `item_type`
+- [ ] Оновити Node.js 18 → 20 в Railway
+- [ ] Telegram пости з відео — наразі тільки текст і фото
+
+### Потенційні покращення
+- [ ] Команда `/search <запит>` — пошук прямо в боті
+- [ ] Кешування однакових URL (не витрачати API двічі)
+- [ ] Telegram приватні канали (MTProto / UserBot)
+- [ ] Відео-повідомлення (video_note, video)
+- [ ] Пошук на сайті по транскрипції аудіо

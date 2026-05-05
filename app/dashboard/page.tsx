@@ -125,7 +125,7 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        <SavedItemsList items={items ?? []} />
+        <SavedItemsList items={items ?? []} userId={profileId} />
       </main>
     </div>
   )
